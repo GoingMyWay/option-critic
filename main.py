@@ -6,10 +6,9 @@ import gym
 from gym import wrappers
 import tensorflow as tf
 
-
-execfile("models/option_critic_network.py")
-execfile("helper/buffer.py")
-execfile("helper/state_processor.py")
+from models.option_critic_network import OptionsNetwork
+from helper.buffer import ReplayBuffer
+from helper.state_processor import StateProcessor
 
 
 # ========================================
@@ -83,7 +82,7 @@ def build_summaries():
     tot_reward = tf.Variable(0.)
     tf.summary.scalar("DOCA/Total Reward", tot_reward)
     cum_reward = tf.Variable(0.)
-    tf.summary.scalar("DOCA/Cummulative Reward", tot_reward)
+    tf.summary.scalar("DOCA/Cummulative Reward", cum_reward)
     rmng_frames = tf.Variable(0.)
     tf.summary.scalar("DOCA/Remaining Frames", rmng_frames)
 
@@ -105,12 +104,12 @@ def get_reward(reward):
 
     return score, reward
 
+
 def get_epsilon(frm_count):
     #linear descent from 1 to 0.1 starting at the replay_start_time
     replay_start_time = max([float(frm_count)-PRE_TRAIN_STEPS, 0])
     epsilon = START_EPS
-    epsilon -= (START_EPS - END_EPS)*\
-      (min(replay_start_time, ANNEALING)/float(ANNEALING))
+    epsilon -= (START_EPS - END_EPS)*(min(replay_start_time, ANNEALING)/float(ANNEALING))
     return epsilon
 
 # ===========================
@@ -143,7 +142,7 @@ def train(sess, env, option_critic):  # , critic):
         env.action_space.n)} for i in range(OPTION_DIM)]
     total_reward = 0
     counter = 0
-    for i in xrange(MAX_EPISODES):
+    for i in range(MAX_EPISODES):
         term_probs = []
         start_frames = frame_count
 
@@ -175,7 +174,7 @@ def train(sess, env, option_critic):  # , critic):
                 eps = get_epsilon(frame_count)
                 if termination:
                     if print_option_stats:
-                        print "terminated -------", since_last_term,
+                        print("terminated -------", since_last_term, end=',')
 
                     termination_counter += 1
                     since_last_term = 1
@@ -183,7 +182,7 @@ def train(sess, env, option_critic):  # , critic):
                         if np.random.rand() < eps else new_option
                 else:
                     if print_option_stats:
-                        print "keep going"
+                        print("keep going")
 
                     since_last_term += 1
 
@@ -195,18 +194,18 @@ def train(sess, env, option_critic):  # , critic):
                         action_counter[current_option][current_action] += 1
                         data_table = []
                         option_count = []
-                        for ii, aa in enumerate(action_counter):
+                        for ii, aa in enumerate(action_counter):  # TODO why
                             s3 = sum([aa[a] for a in aa])
                             if s3 < 1:
                                 continue
 
-                            print ii, aa, s3
+                            print(ii, aa, s3)
                             option_count.append(s3)
-                            print [str(float(aa[a]) / s3)[:5] for a in aa]
+                            print([str(float(aa[a]) / s3)[:5] for a in aa])
                             data_table.append([float(aa[a]) / s3 for a in aa])
-                            print
+                            print('\n')
 
-                        print
+                        print('\n')
 
                 next_state, reward, done, info = env.step(current_action)
                 next_state = state_processor.process(sess, next_state)
@@ -258,7 +257,7 @@ def train(sess, env, option_critic):  # , critic):
 
                     if frame_count % (FREEZE_INTERVAL) == 0:
                         # Update target networks
-                        print "updated params"
+                        print("updated params")
                         option_critic.update_target_network()
 
                 current_state = next_state
@@ -282,11 +281,11 @@ def train(sess, env, option_critic):  # , critic):
                     break
 
             term_ratio = float(termination_counter) / float(episode_counter)
-            print '| Reward: %.2i' % int(ep_reward), " | Episode %d" % (counter + 1), \
-                ' | Qmax: %.4f' % (ep_ave_max_q / float(episode_counter)), \
-                ' | Cummulative Reward: %.1f' % (total_reward / float(counter + 1)), \
-                ' | %d Remaining Frames' % (MAX_EP_STEPS - (frame_count - start_frames)), \
-                ' | Epsilon: %.4f' % eps, " | Termination Ratio: %.2f" % (100*term_ratio)
+            print('| Reward: %.2i' % int(ep_reward), " | Episode %d" % (counter + 1),
+                ' | Qmax: %.4f' % (ep_ave_max_q / float(episode_counter)),
+                ' | Cummulative Reward: %.1f' % (total_reward / float(counter + 1)),
+                ' | %d Remaining Frames' % (MAX_EP_STEPS - (frame_count - start_frames)),
+                ' | Epsilon: %.4f' % eps, " | Termination Ratio: %.2f" % (100*term_ratio))
             counter += 1
 
 def set_up_gym():
@@ -324,7 +323,7 @@ def main(_):
     # assert(env.action_space.high == -env.action_space.low)
 
     with tf.Session() as sess:
-        tf.set_random_seed(123456)
+        tf.set_random_seed(RANDOM_SEED)
         # sess, h_size, temp, state_dim, action_dim, option_dim, action_bound, learning_rate, tau
         option_critic = OptionsNetwork(
             sess, 512, 1, state_dim, action_dim, 8, ACTOR_LEARNING_RATE, TAU, GAMMA, clip_delta=1)
